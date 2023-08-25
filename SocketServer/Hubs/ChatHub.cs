@@ -12,16 +12,17 @@ namespace SocketServer.Hubs
             _connections = connections;
         }
 
-        public override Task OnDisconnectedAsync(Exception? exception)
+        public override async Task OnDisconnectedAsync(Exception? exception)
         {
             if (_connections.TryGetValue(Context.ConnectionId, out UserConnection userConnection))
             {
                 _connections.Remove(Context.ConnectionId);
 
-                SendGroups();
+                await SendGroups();
+                await SendConnectedUsers(userConnection.Room);
             }
 
-            return base.OnDisconnectedAsync(exception);
+            await base.OnDisconnectedAsync(exception);
         }
 
 
@@ -35,6 +36,7 @@ namespace SocketServer.Hubs
             _connections[Context.ConnectionId] = userConnection;
 
             await SendGroups();
+            await SendConnectedUsers(userConnection.Room);
         }
 
         public async Task SendMessage(string message)
@@ -55,6 +57,16 @@ namespace SocketServer.Hubs
               .Distinct();
 
             return Clients.All.SendAsync("RoomsAvailable", users);
+        }
+
+        public Task SendConnectedUsers(string room)
+        {
+            var users = _connections
+                .Values
+                .Where(x => x.Room == room)
+                .Select(x => x.UserName);
+
+            return Clients.Group(room).SendAsync("UsersInRoom", users);
         }
     }
 }
